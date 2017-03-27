@@ -1,6 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-
+using UnityEngine;
 public class CityGraph
 {
 	public class Edge
@@ -9,21 +9,21 @@ public class CityGraph
 		public Vertex pointB;
 		public int travelTally;
 
-		public Lot[] neighbouringLots;
+		public Lot[] adjacentLots;
 
 		public Edge (Vertex a, Vertex b)
 		{
 			pointA = a;
 			pointB = b;
 			travelTally = 0;
-			neighbouringLots = new Lot[2];
+			adjacentLots = new Lot[2];
 		}
 
 		public int NeighbouringLotsCount
 		{
 			get {
 
-				return (neighbouringLots [0] == null ? 0 : 1) + (neighbouringLots [1] == null ? 0 : 1);
+				return (adjacentLots[0] == null ? 0 : 1) + (adjacentLots[1] == null ? 0 : 1);
 			}
 		}
 	}
@@ -33,9 +33,9 @@ public class CityGraph
 		public GridPoint[] corners;
 		private int m_MinX, m_MaxX, m_MinY, m_MaxY;
 
-		public Lot(GridPoint point1, GridPoint point2, GridPoint point3, GridPoint point4)
+		public Lot(GridPoint edgePoint1, GridPoint edgePoint2, GridPoint ep1Normal, GridPoint ep2Normal)
 		{
-			GridPoint[] unsortedCorners = new GridPoint[]{point1, point2, point3, point4};
+			corners = new GridPoint[]{edgePoint1, edgePoint2, ep2Normal, ep1Normal};
 
 			m_MinX = int.MaxValue;
 			m_MaxX = int.MinValue;
@@ -65,32 +65,42 @@ public class CityGraph
 				}
 			}
 
-			corners = new GridPoint[4];
-			//Corners are sorted from bottom left to top right -> BL, TL, BR, TR
+//			corners = new GridPoint[4];
+//			//Corners are sorted from bottom left to top right -> BL, TL, BR, TR
+//
+//			for(int i = 0; i < corners.Length; i++)
+//			{
+//				//First is the smallest X that is lower that largest Y
+//				if(corners[i].xPos == m_MinX && corners[i].yPos < m_MaxY)
+//				{
+//					corners[0] = corners[i];
+//				}
+//				//Second is the largest Y that is lower than the largest X
+//				else if(corners[i].yPos == m_MaxY && corners[i].xPos < m_MaxX)
+//				{
+//					corners[1] = corners[i];
+//				}
+//				//Third is the largest X that is greater than the smallest Y
+//				else if(corners[i].xPos == m_MaxX && corners[i].yPos > m_MinY)
+//				{
+//					corners[2] = corners[i];
+//				}
+//				//Fourth is the smallest Y that is lower than the largest X
+//				else if(corners[i].yPos == m_MinY && corners[i].xPos < m_MaxX)
+//				{
+//					corners[3] = corners[i];
+//				}
+//			}				
+		}
 
-			for(int i = 0; i < unsortedCorners.Length; i++)
-			{
-				//First is the smallest X that is lower that largest Y
-				if(unsortedCorners[i].xPos == m_MinX && unsortedCorners[i].yPos < m_MaxY)
-				{
-					corners[0] = unsortedCorners[i];
-				}
-				//Second is the largest Y that is lower than the largest X
-				else if(unsortedCorners[i].yPos == m_MaxY && unsortedCorners[i].xPos < m_MaxX)
-				{
-					corners[1] = unsortedCorners[i];
-				}
-				//Third is the largest X that is greater than the smallest Y
-				else if(unsortedCorners[i].xPos == m_MaxX && unsortedCorners[i].yPos > m_MinY)
-				{
-					corners[2] = unsortedCorners[i];
-				}
-				//Fourth is the smallest Y that is lower than the largest X
-				else if(unsortedCorners[i].yPos == m_MinY && unsortedCorners[i].xPos < m_MaxX)
-				{
-					corners[3] = unsortedCorners[i];
-				}
-			}				
+		public Vector2 GetCenter(float pointSpacing)
+		{
+			Vector2 point1 = corners [0].ConvertToWorldPoint (pointSpacing);
+			Vector2 point2 = corners [1].ConvertToWorldPoint (pointSpacing);
+			Vector2 point3 = corners [2].ConvertToWorldPoint (pointSpacing);
+			Vector2 point4 = corners [3].ConvertToWorldPoint (pointSpacing);
+
+			return (point1 + point2 + point3 + point4) / 4;
 		}
 
 		//TODO: Implement this properly
@@ -144,6 +154,7 @@ public class CityGraph
 
 	private List<Vertex> vertices;
 	private List<Edge> edges;
+	private List<Lot> lots;
 	private Dictionary<GridPoint, Vertex> m_VertexTable;
 
 	public void AddVertex(GridPoint vertexPoint)
@@ -177,6 +188,27 @@ public class CityGraph
 		vertexB.connectedEdges.Add (newEdge);
 	}
 
+	public bool AddLot(Edge adjacentEdge, Lot lot)
+	{
+		bool overlapsFirstLot = adjacentEdge.adjacentLots[0] != null && adjacentEdge.adjacentLots[0].Overlaps(lot);
+		bool overlapsSecondLot = adjacentEdge.adjacentLots[1] != null && adjacentEdge.adjacentLots[1].Overlaps(lot);
+		bool success = false;
+
+		if (adjacentEdge.adjacentLots [0] == null && !overlapsSecondLot){			
+			adjacentEdge.adjacentLots [0] = lot;
+			success = true;
+		} else if (adjacentEdge.adjacentLots [1] == null && !overlapsFirstLot) {
+			adjacentEdge.adjacentLots[1] = lot;
+			success = true;
+		}
+
+		if (success) {
+			lots.Add (lot);
+		}
+
+		return success;
+	}
+
 	public Vertex GetVertexAt(int index)
 	{
 		if (index >= 0 && index < vertices.Count) {
@@ -196,6 +228,11 @@ public class CityGraph
 		return vertices.ToArray ();
 	}
 
+	public Lot[] GetLots()
+	{
+		return lots.ToArray ();
+	}
+
 	public int GetVertexCount()
 	{
 		return vertices.Count;
@@ -205,6 +242,7 @@ public class CityGraph
 	{
 		vertices = new List<Vertex>();
 		edges = new List<Edge>();
+		lots = new List<Lot> ();
 		m_VertexTable = new Dictionary<GridPoint, Vertex>();
 	}
 
@@ -212,6 +250,7 @@ public class CityGraph
 	{
 		vertices = new List<Vertex>();
 		edges = new List<Edge>();
+		lots = new List<Lot> ();
 		m_VertexTable = new Dictionary<GridPoint, Vertex>();
 
 		for(int i = 0; i < initVerts.Length; i++)

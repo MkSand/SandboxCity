@@ -8,6 +8,9 @@ public class StreetGenerator : MonoBehaviour {
 	public LineRenderer initialRoad;
 	public int iterations = 100;
 	public int generations = 5;
+	public int populationPerGeneration = 25;
+	[Range(0.01f, 1)]
+	public float populationDensity = 0.5f;
 	public float increment = 1;
 	public int reduceIncEvery = 100;
 	public float reduceBy = 0.25f;
@@ -20,7 +23,8 @@ public class StreetGenerator : MonoBehaviour {
 	public bool restrictToCircle;
 	public GameObject obstructionsParent;
 	public CityRenderer cityRenderer;
-	private Collider2D[] m_Obstructions;
+	private List<Collider2D> m_Obstructions;
+	private List<Collider2D> m_BaseObstructions;
 
 	public float pointDensity = 50;
 	private float m_PointSpacing;
@@ -38,7 +42,8 @@ public class StreetGenerator : MonoBehaviour {
 		right = center.x + size.x / 2;
 		top = center.y + size.y / 2;
 		bottom = center.y - size.y / 2;
-		m_Obstructions = obstructionsParent.GetComponentsInChildren<Collider2D> ();
+		m_BaseObstructions = new List<Collider2D>(obstructionsParent.GetComponentsInChildren<Collider2D> ());
+		m_Obstructions = new List<Collider2D> (m_BaseObstructions);
 		SetupPoints ();
 
 		if (initialRoad != null) {
@@ -77,14 +82,17 @@ public class StreetGenerator : MonoBehaviour {
 			//1. FIND PATHS
 			m_Graph = BuildRRT (m_Graph, iterationsPerStep, baseRoadIncrement);
 			//2. PLACE BUILDINGS
-			m_Graph = AddBuildingsToCity(m_Graph, 100 * i);
+			m_Graph = AddBuildingsToCity(m_Graph, populationPerGeneration * (i+1));
 			//3. SIMULATE TRAVEL
+
 			//4. PLACE ROADS
+			m_Obstructions = new List<Collider2D> (m_BaseObstructions);
+			m_Obstructions.AddRange(cityRenderer.DrawRoads (m_Graph, m_PointSpacing));
 			yield return null;
 		}
 
 
-		cityRenderer.DrawRoads (m_Graph, m_PointSpacing);
+
 	}
 
 	private void SetupPoints()
@@ -178,8 +186,12 @@ public class StreetGenerator : MonoBehaviour {
 		allEdges.Sort (CompareEdges);
 		//place lots on edges (left or right)
 		//Lots are made up of at least 4 points. 
+		float totalLotsToPlace = lotsToPlace;
 
 		for (int i = 0; i < allEdges.Count && lotsToPlace > 0; i++) {
+
+			if (Random.value < (1-populationDensity))
+				continue;
 
 			if (allEdges [i].NeighbouringLotsCount < 2) {
 				GridPoint point1 = allEdges [i].pointA.position;
@@ -193,10 +205,23 @@ public class StreetGenerator : MonoBehaviour {
 				CityGraph.Lot rhLot = new CityGraph.Lot (point1, point2, ConvertToGridPoint (point1Vec + rhNormal), ConvertToGridPoint (point2Vec + rhNormal));
 				CityGraph.Lot lhLot = new CityGraph.Lot (point1, point2, ConvertToGridPoint (point1Vec + lhNormal), ConvertToGridPoint (point2Vec + lhNormal));
 
+				bool coinFlip = Random.value > 0.5f;
 
+				CityGraph.Lot lotToAdd = rhLot;
+				if (coinFlip == true)
+					lotToAdd = lhLot;
+					
+				bool success = currentCity.AddLot (allEdges [i], lotToAdd);
+				if (!success) {
+					lotToAdd = coinFlip ? rhLot : lhLot;
+					success = currentCity.AddLot (allEdges [i], lotToAdd);
+				}
+
+				if (success) {
+					lotsToPlace--;
+				}
 			}
 		}
-		//Buildings take up an even number of lots
 
 		return currentCity;
 	}
@@ -222,7 +247,7 @@ public class StreetGenerator : MonoBehaviour {
 		{
 			Vector2 worldPoint = point.ConvertToWorldPoint (m_PointSpacing);
 			bool overlaps = false;
-			for (int o = 0; o < m_Obstructions.Length && !overlaps; o++) {
+			for (int o = 0; o < m_Obstructions.Count && !overlaps; o++) {
 				overlaps |= m_Obstructions [o].OverlapPoint (worldPoint);
 			}
 
