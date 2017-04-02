@@ -47,7 +47,7 @@ public class StreetGenerator : MonoBehaviour {
 		SetupPoints ();
 
 		if (initialRoad != null) {
-			Vector3[] lineRendererPositions = new Vector3[initialRoad.numPositions];
+			Vector3[] lineRendererPositions = new Vector3[initialRoad.positionCount];
 			initialRoad.GetPositions (lineRendererPositions);
 			initVertices = new Vector2[lineRendererPositions.Length];
 
